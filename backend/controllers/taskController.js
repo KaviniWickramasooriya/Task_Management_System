@@ -19,3 +19,14 @@ export const deleteTask = async (req, res) => {
   await Task.findByIdAndDelete(req.params.id);
   res.json({ message: 'Deleted' });
 };
+
+// Get tasks assigned to a specific user by userId
+export const getTasksByUserId = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const tasks = await Task.find({ assignedTo: userId }).populate('assignedTo');
+    res.json(tasks);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};

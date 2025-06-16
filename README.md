@@ -1,6 +1,6 @@
-# 📋 Task Management WebApp – Gamage Recruiters SE Internship Project
+# 📋 Task Management WebApp
 
-A full-stack **Task Management System** built as part of the Gamage Recruiters Software Engineering Internship (June, Week 1). This project evaluates a candidate's ability to rapidly prototype and deliver a secure, well-structured MERN application with modern UI/UX and feature-rich functionalities under a 24-hour challenge.
+A full-stack **Task Management System** built as part of the Gamage Recruiters Software Engineering Internship. This project evaluates a candidate's ability to rapidly prototype and deliver a secure, well-structured MERN application with modern UI/UX and feature-rich functionalities.
 
 ---
 
@@ -51,7 +51,7 @@ cp ../env_files/.env.backend .env
 npm start
 
 
-## 🖥️  Backend Setup
+## 🖥️  Frontend Setup
 
 cd ../frontend
 npm install

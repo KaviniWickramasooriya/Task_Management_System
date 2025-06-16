@@ -69,7 +69,7 @@ function LoginPage() {
               value={formData.email}
               onChange={handleChange}
               required
-              placeholder="example@email.com"
+              placeholder="Enter your email"
             />
           </div>
 

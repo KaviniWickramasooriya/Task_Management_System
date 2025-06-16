@@ -117,8 +117,9 @@ function SignUp() {
   };
 
   return (
-    <div className="p-4" style={{ maxWidth: 420, margin: 'auto' }}>
-      <h2 className="mb-4 text-center">Sign Up with Email OTP Verification</h2>
+    <div className="d-flex align-items-center justify-content-center min-vh-100 bg-light">
+      <div className="shadow p-4 rounded bg-white" style={{ width: '100%', maxWidth: '400px' }}>
+      <h3 className="text-center mb-4 text-primary">Create Account</h3>
 
       {/* Message */}
       {message && <div className="alert alert-info">{message}</div>}
@@ -133,7 +134,7 @@ function SignUp() {
           className="form-control"
           value={formData.name}
           onChange={handleChange}
-          placeholder="John Doe"
+          placeholder="Your name"
           required
         />
       </div>
@@ -149,7 +150,7 @@ function SignUp() {
             className="form-control"
             value={formData.email}
             onChange={handleChange}
-            placeholder="example@email.com"
+            placeholder="Your email"
             required
             disabled={otpSent} // disable email input after OTP sent
           />
@@ -214,6 +215,13 @@ function SignUp() {
       >
         {loadingSignUp ? 'Signing up...' : 'Sign Up'}
       </button>
+
+        <div className="text-center mt-3">
+          <small>
+            Do you have an account? <a href="/">Login</a>
+          </small>
+        </div>
+    </div>
     </div>
   );
 }

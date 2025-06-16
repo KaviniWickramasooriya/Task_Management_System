@@ -1,16 +1,10 @@
-import User from '../models/User.js';
+import express from 'express';
+import { getUsers, updateUser, deactivateUser, getUserProfile } from '../controllers/userController.js';
+const router = express.Router();
 
-export const getUsers = async (req, res) => {
-  const users = await User.find();
-  res.json(users);
-};
+router.get('/', getUsers);
+router.put('/:id', updateUser);
+router.get('/profile/:id', getUserProfile);
+router.put('/deactivate/:id', deactivateUser);
 
-export const updateUser = async (req, res) => {
-  const user = await User.findByIdAndUpdate(req.params.id, req.body, { new: true });
-  res.json(user);
-};
-
-export const deactivateUser = async (req, res) => {
-  const user = await User.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true });
-  res.json(user);
-};
+export default router;

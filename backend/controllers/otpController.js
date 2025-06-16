@@ -79,9 +79,6 @@ const EMAIL_PASS = 'iabcttdgiwxffzhs';
 
 const otpStore = {}; // Temporary in-memory OTP store
 
-console.log('Using hardcoded EMAIL_USER:', EMAIL_USER);
-console.log('Using hardcoded EMAIL_PASS:', EMAIL_PASS ? '******' : 'MISSING');
-
 // Generate and send OTP
 export const sendOTP = (req, res) => {
   const { email } = req.body;

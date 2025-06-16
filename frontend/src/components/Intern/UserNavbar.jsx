@@ -14,7 +14,7 @@ function UserNavbar() {
   return (
     <Navbar bg="light" expand="lg" className="shadow-sm mb-4">
       <Container>
-        <Navbar.Brand as={NavLink} to="/" className="fw-bold text-primary">
+        <Navbar.Brand as={NavLink} to="/tasks" className="fw-bold text-primary">
           User Dashboard
         </Navbar.Brand>
 

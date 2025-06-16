@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import UserNavbar from '../../components/UserNavbar';
+import UserNavbar from '../../components/Intern/UserNavbar';
 
 function UserProfile() {
   const [userData, setUserData] = useState(null);

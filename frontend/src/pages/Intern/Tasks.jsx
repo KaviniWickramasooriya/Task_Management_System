@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import UserNavbar from '../../components/UserNavbar';
+import UserNavbar from '../../components/Intern/UserNavbar';
 
 function Tasks() {
   const [userId, setUserId] = useState(null);

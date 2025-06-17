@@ -1,8 +1,12 @@
 import User from '../models/User.js';
 
 export const getUsers = async (req, res) => {
-  const users = await User.find();
-  res.json(users);
+  try {
+    const users = await User.find({ role: 'intern' });
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
 };
 
 export const updateUser = async (req, res) => {

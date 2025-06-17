@@ -1,19 +1,28 @@
 import React, { useEffect, useState } from 'react';
-import { Table, Button, Modal, Form, InputGroup, FormControl, Spinner } from 'react-bootstrap';
+import {
+  Table,
+  Button,
+  Modal,
+  Form,
+  InputGroup,
+  FormControl,
+  Spinner,
+  Pagination,
+} from 'react-bootstrap';
 import AdminNavbar from '../../components/Admin/AdminNavbar';
-
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { FaPlus, FaEdit, FaTrash, FaFilePdf } from 'react-icons/fa';
 
 function AdminTasks() {
   const [tasks, setTasks] = useState([]);
-  const [filteredTasks, setFilteredTasks] = useState([]);
+  const [upcomingTasks, setUpcomingTasks] = useState([]);
+  const [pastTasks, setPastTasks] = useState([]);
   const [users, setUsers] = useState([]);
   const [userFilter, setUserFilter] = useState('');
-
   const [loading, setLoading] = useState(false);
-
   const [showAddEditModal, setShowAddEditModal] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -21,17 +30,34 @@ function AdminTasks() {
     assignedTo: '',
     status: 'Pending',
   });
-
   const [editingTask, setEditingTask] = useState(null);
   const [deleteTaskId, setDeleteTaskId] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Pagination
+  const itemsPerPage = 5;
+  const [upcomingPage, setUpcomingPage] = useState(1);
+  const [pastPage, setPastPage] = useState(1);
 
   const fetchTasks = async () => {
     setLoading(true);
     try {
       const res = await fetch(`${process.env.REACT_APP_API_URL}/tasks`);
       const data = await res.json();
+
+      const now = new Date();
+
+      const upcoming = data
+        .filter((t) => !t.deadline || new Date(t.deadline) >= now)
+        .sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+
+      const past = data
+        .filter((t) => t.deadline && new Date(t.deadline) < now)
+        .sort((a, b) => new Date(b.deadline) - new Date(a.deadline));
+
       setTasks(data);
-      setFilteredTasks(data);
+      setUpcomingTasks(upcoming);
+      setPastTasks(past);
     } catch (error) {
       alert('Failed to fetch tasks');
     }
@@ -55,12 +81,23 @@ function AdminTasks() {
 
   const handleSearch = (e) => {
     const query = e.target.value.toLowerCase();
-    setFilteredTasks(tasks.filter(task => task.title.toLowerCase().includes(query)));
-  };
+    setSearchQuery(query);
+    const now = new Date();
 
-  const filteredUsers = users.filter(user =>
-    user.name.toLowerCase().includes(userFilter.toLowerCase())
-  );
+    const filtered = tasks.filter((task) =>
+      task.title.toLowerCase().includes(query)
+    );
+
+    const upcoming = filtered
+      .filter((t) => !t.deadline || new Date(t.deadline) >= now)
+      .sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+    const past = filtered
+      .filter((t) => t.deadline && new Date(t.deadline) < now)
+      .sort((a, b) => new Date(b.deadline) - new Date(a.deadline));
+
+    setUpcomingTasks(upcoming);
+    setPastTasks(past);
+  };
 
   const openAddModal = () => {
     setEditingTask(null);
@@ -89,7 +126,6 @@ function AdminTasks() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-
     const method = editingTask ? 'PUT' : 'POST';
     const url = editingTask
       ? `${process.env.REACT_APP_API_URL}/tasks/${editingTask._id}`
@@ -137,125 +173,273 @@ function AdminTasks() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const filteredUsers = users.filter((user) =>
+    user.name.toLowerCase().includes(userFilter.toLowerCase())
+  );
+
+  const downloadPDF = (taskList, title, filename) => {
+    const doc = new jsPDF();
+    doc.setFontSize(16);
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const textWidth = doc.getTextWidth(title);
+    const center = (pageWidth - textWidth) / 2;
+    doc.text(title, center, 15);
+    autoTable(doc, {
+      startY: 20,
+      head: [['Title', 'Description', 'Deadline', 'Assigned To', 'Status']],
+      body: taskList.map((task) => [
+        task.title,
+        task.description,
+        task.deadline ? new Date(task.deadline).toLocaleDateString() : '',
+        task.assignedTo?.name || 'Unassigned',
+        task.status,
+      ]),
+    });
+    doc.save(filename);
+  };
+
+  const paginate = (items, currentPage) =>
+    items.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const renderPagination = (total, currentPage, onPageChange) => {
+    const pages = Math.ceil(total / itemsPerPage);
+    return (
+      <Pagination className="justify-content-center">
+        {[...Array(pages)].map((_, i) => (
+          <Pagination.Item
+            key={i + 1}
+            active={i + 1 === currentPage}
+            onClick={() => onPageChange(i + 1)}
+          >
+            {i + 1}
+          </Pagination.Item>
+        ))}
+      </Pagination>
+    );
   };
 
   return (
-    <><AdminNavbar />
-    <div className="container mt-4">
-      
-      <div className="d-flex justify-content-between align-items-center mb-3">
-        <InputGroup style={{ maxWidth: '300px' }}>
-          <FormControl placeholder="Search by title" onChange={handleSearch} />
-        </InputGroup>
-        <Button variant="primary" onClick={openAddModal}>Add New Task</Button>
-      </div>
+    <>
+      <AdminNavbar />
+      <div className="container mt-4">
+        <div className="d-flex justify-content-between align-items-center mb-3">
+          <InputGroup style={{ maxWidth: '300px' }}>
+            <FormControl
+              placeholder="Search by title"
+              onChange={handleSearch}
+              value={searchQuery}
+            />
+          </InputGroup>
+          <div>
+            <Button
+              variant="secondary"
+              className="me-2"
+              onClick={() =>
+                downloadPDF(upcomingTasks, 'Upcoming/Ongoing Tasks Report', 'upcoming_tasks.pdf')
+              }
+            >
+              <FaFilePdf className="me-1" /> Download Upcoming Tasks
+            </Button>
+            <Button
+              variant="secondary"
+              className="me-2"
+              onClick={() =>
+                downloadPDF(pastTasks, 'Past Deadline Tasks Report', 'past_tasks.pdf')
+              }
+            >
+              <FaFilePdf className="me-1" /> Download Past Tasks
+            </Button>
+            <Button variant="success" onClick={openAddModal}>
+              <FaPlus className="me-1" /> Add New Task
+            </Button>
+          </div>
+        </div>
 
-      {loading && <Spinner animation="border" className="mb-2" />}
+        {loading && <Spinner animation="border" className="mb-2" />}
 
-      <Table striped bordered hover responsive>
-        <thead>
-          <tr>
-            <th>Title</th>
-            <th>Description</th>
-            <th>Deadline</th>
-            <th>Assigned To</th>
-            <th>Status</th>
-            <th style={{ minWidth: '150px' }}>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredTasks.length === 0 ? (
-            <tr><td colSpan="6" className="text-center">No tasks found</td></tr>
-          ) : (
-            filteredTasks.map(task => (
+        {/* Upcoming Tasks Table */}
+        <h5>Upcoming/Ongoing Tasks</h5>
+        <Table striped bordered hover responsive>
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Description</th>
+              <th>Deadline</th>
+              <th>Assigned To</th>
+              <th>Status</th>
+              <th className="text-center" style={{ minWidth: '150px' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {paginate(upcomingTasks, upcomingPage).map((task) => (
               <tr key={task._id}>
                 <td>{task.title}</td>
                 <td>{task.description}</td>
                 <td>{task.deadline ? new Date(task.deadline).toLocaleDateString() : ''}</td>
                 <td>{task.assignedTo?.name || 'Unassigned'}</td>
                 <td>{task.status}</td>
-                <td>
-                  <Button size="sm" variant="warning" className="me-2" onClick={() => openEditModal(task)}>Update</Button>
-                  <Button size="sm" variant="danger" onClick={() => openDeleteConfirm(task._id)}>Delete</Button>
+                <td className="text-center">
+                  <Button
+                    size="sm"
+                    variant="warning"
+                    className="me-2"
+                    onClick={() => openEditModal(task)}
+                  >
+                    <FaEdit />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    onClick={() => openDeleteConfirm(task._id)}
+                  >
+                    <FaTrash />
+                  </Button>
                 </td>
               </tr>
-            ))
-          )}
-        </tbody>
-      </Table>
+            ))}
+          </tbody>
+        </Table>
+        {renderPagination(upcomingTasks.length, upcomingPage, setUpcomingPage)}
 
-      {/* Add/Edit Modal */}
-      <Modal show={showAddEditModal} onHide={() => setShowAddEditModal(false)}>
-        <Modal.Header closeButton>
-          <Modal.Title>{editingTask ? 'Update Task' : 'Add Task'}</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <Form onSubmit={handleSubmit}>
-            <Form.Group className="mb-3">
-              <Form.Label>Title</Form.Label>
-              <Form.Control type="text" name="title" value={formData.title} onChange={handleChange} required />
-            </Form.Group>
+        {/* Past Tasks Table */}
+        <h5 className="mt-5">Past Deadline Tasks</h5>
+        <Table striped bordered hover responsive>
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Description</th>
+              <th>Deadline</th>
+              <th>Assigned To</th>
+              <th>Status</th>
+              <th className="text-center" style={{ minWidth: '100px' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {paginate(pastTasks, pastPage).map((task) => (
+              <tr key={task._id}>
+                <td>{task.title}</td>
+                <td>{task.description}</td>
+                <td>{task.deadline ? new Date(task.deadline).toLocaleDateString() : ''}</td>
+                <td>{task.assignedTo?.name || 'Unassigned'}</td>
+                <td>{task.status}</td>
+                <td className="text-center">
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    onClick={() => openDeleteConfirm(task._id)}
+                  >
+                    <FaTrash />
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+        {renderPagination(pastTasks.length, pastPage, setPastPage)}
 
-            <Form.Group className="mb-3">
-              <Form.Label>Description</Form.Label>
-              <Form.Control as="textarea" rows={3} name="description" value={formData.description} onChange={handleChange} />
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-              <Form.Label>Deadline</Form.Label>
-              <Form.Control type="date" name="deadline" value={formData.deadline} onChange={handleChange} />
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-              <Form.Label>Assign To</Form.Label>
-              <Form.Control
-                type="text"
-                placeholder="Search user"
-                value={userFilter}
-                onChange={(e) => setUserFilter(e.target.value)}
-              />
-              <Form.Select name="assignedTo" value={formData.assignedTo} onChange={handleChange} required>
-                <option value="">Select user</option>
-                {filteredUsers.map(user => (
-                  <option key={user._id} value={user._id}>{user.name}</option>
-                ))}
-              </Form.Select>
-            </Form.Group>
-
-            {/* Show status only when editing */}
-            {editingTask && (
+        {/* Modals */}
+        <Modal show={showAddEditModal} onHide={() => setShowAddEditModal(false)}>
+          <Modal.Header closeButton>
+            <Modal.Title>{editingTask ? 'Update Task' : 'Add Task'}</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <Form onSubmit={handleSubmit}>
               <Form.Group className="mb-3">
-                <Form.Label>Status</Form.Label>
-                <Form.Select name="status" value={formData.status} onChange={handleChange}>
-                  <option>Pending</option>
-                  <option>In Progress</option>
-                  <option>Completed</option>
+                <Form.Label>Title</Form.Label>
+                <Form.Control
+                  type="text"
+                  name="title"
+                  value={formData.title}
+                  onChange={handleChange}
+                  required
+                />
+              </Form.Group>
+
+              <Form.Group className="mb-3">
+                <Form.Label>Description</Form.Label>
+                <Form.Control
+                  as="textarea"
+                  rows={3}
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                />
+              </Form.Group>
+
+              <Form.Group className="mb-3">
+                <Form.Label>Deadline</Form.Label>
+                <Form.Control
+                  type="date"
+                  name="deadline"
+                  value={formData.deadline}
+                  onChange={handleChange}
+                  min={new Date().toISOString().split('T')[0]}
+                />
+              </Form.Group>
+
+              <Form.Group className="mb-3">
+                <Form.Label>Assign To</Form.Label>
+                <Form.Control
+                  type="text"
+                  placeholder="Search user"
+                  value={userFilter}
+                  onChange={(e) => setUserFilter(e.target.value)}
+                />
+                <Form.Select
+                  name="assignedTo"
+                  value={formData.assignedTo}
+                  onChange={handleChange}
+                  required
+                >
+                  <option value="">Select user</option>
+                  {filteredUsers.map((user) => (
+                    <option key={user._id} value={user._id}>
+                      {user.name}
+                    </option>
+                  ))}
                 </Form.Select>
               </Form.Group>
-            )}
 
-            <Button type="submit" variant="primary" className="w-100" disabled={loading}>
-              {loading ? <Spinner animation="border" size="sm" /> : (editingTask ? 'Update' : 'Add')}
+              {editingTask && (
+                <Form.Group className="mb-3">
+                  <Form.Label>Status</Form.Label>
+                  <Form.Select
+                    name="status"
+                    value={formData.status}
+                    onChange={handleChange}
+                  >
+                    <option>Pending</option>
+                    <option>In Progress</option>
+                    <option>Completed</option>
+                  </Form.Select>
+                </Form.Group>
+              )}
+
+              <Button type="submit" variant="primary" className="w-100" disabled={loading}>
+                {loading ? <Spinner animation="border" size="sm" /> : editingTask ? 'Update' : 'Add'}
+              </Button>
+            </Form>
+          </Modal.Body>
+        </Modal>
+
+        <Modal show={showConfirm} onHide={() => setShowConfirm(false)} centered>
+          <Modal.Header closeButton>
+            <Modal.Title>Confirm Delete</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>Are you sure you want to delete this task?</Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={() => setShowConfirm(false)}>
+              Cancel
             </Button>
-          </Form>
-        </Modal.Body>
-      </Modal>
-
-      {/* Delete Confirmation */}
-      <Modal show={showConfirm} onHide={() => setShowConfirm(false)} centered>
-        <Modal.Header closeButton>
-          <Modal.Title>Confirm Delete</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>Are you sure you want to delete this task?</Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowConfirm(false)}>Cancel</Button>
-          <Button variant="danger" onClick={handleDelete} disabled={loading}>
-            {loading ? <Spinner animation="border" size="sm" /> : 'Delete'}
-          </Button>
-        </Modal.Footer>
-      </Modal>
-    </div>
+            <Button variant="danger" onClick={handleDelete} disabled={loading}>
+              {loading ? <Spinner animation="border" size="sm" /> : 'Delete'}
+            </Button>
+          </Modal.Footer>
+        </Modal>
+      </div>
     </>
   );
 }

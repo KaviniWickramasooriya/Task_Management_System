@@ -48,12 +48,12 @@ A full-stack **Task Management System** built as part of the Gamage Recruiters S
 1. cd backend  
 2. npm install  
 3. cp ../env_files/.env.backend .env  
-4. npm start  
+4. npm run dev    
 
 ## 🖥️ Frontend Setup
 
 1. cd ../frontend  
 2. npm install  
 3. cp ../env_files/.env.frontend .env  
-4. npm run dev  
+4. npm start
 

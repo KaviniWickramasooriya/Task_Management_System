@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Spinner, Toast } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 
@@ -8,6 +8,74 @@ function LoginPage() {
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState({ show: false, message: '', success: false });
+
+  useEffect(() => {
+    // Load Google Identity Services SDK script
+    const scriptId = 'google-oauth-script';
+    if (!document.getElementById(scriptId)) {
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.id = scriptId;
+      script.async = true;
+      script.defer = true;
+      document.body.appendChild(script);
+      script.onload = initializeGoogleSignIn;
+    } else {
+      initializeGoogleSignIn();
+    }
+  }, []);
+
+  const initializeGoogleSignIn = () => {
+    if (window.google && window.google.accounts && window.google.accounts.id) {
+      window.google.accounts.id.initialize({
+        client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID,
+        callback: handleGoogleResponse,
+      });
+      window.google.accounts.id.renderButton(
+        document.getElementById('googleSignInDiv'),
+        { theme: 'outline', size: 'large', width: '100%' } // customization
+      );
+    }
+  };
+
+  const handleGoogleResponse = async response => {
+    setLoading(true);
+    try {
+      // The ID token from Google
+      const credential = response.credential;
+
+      // Send the token to backend to verify and login/signup user
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: credential }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+
+        setToast({ show: true, message: data.message || 'Login successful', success: true });
+
+        setTimeout(() => {
+          if (data.user.role === 'admin') {
+            navigate('/adminDashboard');
+          } else if (data.user.role === 'intern') {
+            navigate('/tasks');
+          } else {
+            navigate('/');
+          }
+        }, 1500);
+      } else {
+        setToast({ show: true, message: data.message || 'Google login failed', success: false });
+      }
+    } catch (err) {
+      setToast({ show: true, message: 'Server error during Google login', success: false });
+    }
+    setLoading(false);
+  };
 
   const handleChange = e => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -27,20 +95,17 @@ function LoginPage() {
       const data = await res.json();
 
       if (res.ok) {
-        // Save token
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
 
         setToast({ show: true, message: data.message, success: true });
 
-        // Navigate based on role
         setTimeout(() => {
           if (data.user.role === 'admin') {
             navigate('/adminDashboard');
           } else if (data.user.role === 'intern') {
             navigate('/tasks');
-          }
-          else{
+          } else {
             navigate('/');
           }
         }, 1500);
@@ -90,6 +155,10 @@ function LoginPage() {
             {loading ? <Spinner animation="border" size="sm" /> : 'Login'}
           </button>
         </form>
+
+        <div className="my-3 text-center">
+          <div id="googleSignInDiv"></div>
+        </div>
 
         <div className="text-center mt-3">
           <small>

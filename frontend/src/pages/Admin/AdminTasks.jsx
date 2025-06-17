@@ -1,3 +1,4 @@
+// SAME IMPORTS
 import React, { useEffect, useState } from 'react';
 import {
   Table,
@@ -34,7 +35,6 @@ function AdminTasks() {
   const [deleteTaskId, setDeleteTaskId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Pagination
   const itemsPerPage = 5;
   const [upcomingPage, setUpcomingPage] = useState(1);
   const [pastPage, setPastPage] = useState(1);
@@ -47,21 +47,38 @@ function AdminTasks() {
 
       const now = new Date();
 
-      const upcoming = data
-        .filter((t) => !t.deadline || new Date(t.deadline) >= now)
-        .sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+      const filtered = data.filter((task) => task.title.toLowerCase().includes(searchQuery.toLowerCase()));
 
-      const past = data
-        .filter((t) => t.deadline && new Date(t.deadline) < now)
-        .sort((a, b) => new Date(b.deadline) - new Date(a.deadline));
+      const upcoming = filtered
+        .filter((t) => !t.deadline || new Date(t.deadline) >= now);
+
+      const past = filtered
+        .filter((t) => t.deadline && new Date(t.deadline) < now);
 
       setTasks(data);
-      setUpcomingTasks(upcoming);
-      setPastTasks(past);
+      setUpcomingTasks(groupAndSortByUser(upcoming));
+      setPastTasks(groupAndSortByUser(past));
     } catch (error) {
       alert('Failed to fetch tasks');
     }
     setLoading(false);
+  };
+
+  const groupAndSortByUser = (tasks) => {
+    const grouped = {};
+
+    tasks.forEach((task) => {
+      const key = task.assignedTo?.name || 'Unassigned';
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(task);
+    });
+
+    const sortedGroupArray = Object.entries(grouped).map(([user, taskList]) => ({
+      user,
+      tasks: taskList.sort((a, b) => new Date(a.deadline) - new Date(b.deadline)),
+    }));
+
+    return sortedGroupArray;
   };
 
   const fetchUsers = async () => {
@@ -80,24 +97,12 @@ function AdminTasks() {
   }, []);
 
   const handleSearch = (e) => {
-    const query = e.target.value.toLowerCase();
-    setSearchQuery(query);
-    const now = new Date();
-
-    const filtered = tasks.filter((task) =>
-      task.title.toLowerCase().includes(query)
-    );
-
-    const upcoming = filtered
-      .filter((t) => !t.deadline || new Date(t.deadline) >= now)
-      .sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
-    const past = filtered
-      .filter((t) => t.deadline && new Date(t.deadline) < now)
-      .sort((a, b) => new Date(b.deadline) - new Date(a.deadline));
-
-    setUpcomingTasks(upcoming);
-    setPastTasks(past);
+    setSearchQuery(e.target.value);
   };
+
+  useEffect(() => {
+    fetchTasks(); // Refetch on search query update
+  }, [searchQuery]);
 
   const openAddModal = () => {
     setEditingTask(null);
@@ -180,29 +185,49 @@ function AdminTasks() {
     user.name.toLowerCase().includes(userFilter.toLowerCase())
   );
 
-  const downloadPDF = (taskList, title, filename) => {
-    const doc = new jsPDF();
-    doc.setFontSize(16);
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const textWidth = doc.getTextWidth(title);
-    const center = (pageWidth - textWidth) / 2;
-    doc.text(title, center, 15);
-    autoTable(doc, {
-      startY: 20,
-      head: [['Title', 'Description', 'Deadline', 'Assigned To', 'Status']],
-      body: taskList.map((task) => [
-        task.title,
-        task.description,
-        task.deadline ? new Date(task.deadline).toLocaleDateString() : '',
-        task.assignedTo?.name || 'Unassigned',
-        task.status,
-      ]),
-    });
-    doc.save(filename);
-  };
-
   const paginate = (items, currentPage) =>
     items.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const renderGroupedTable = (groupedData, currentPage, setPage, allowEdit = true) => (
+    <>
+      {paginate(groupedData, currentPage).map((group, idx) => (
+        <React.Fragment key={idx}>
+          <tr className="table-primary">
+            <td colSpan="6"><strong>{group.user}</strong></td>
+          </tr>
+          {group.tasks.map((task) => (
+            <tr key={task._id}>
+              <td>{task.title}</td>
+              <td>{task.description}</td>
+              <td>{task.deadline ? new Date(task.deadline).toLocaleDateString() : ''}</td>
+              <td>{task.assignedTo?.name || 'Unassigned'}</td>
+              <td>{task.status}</td>
+              <td className="text-center">
+                {allowEdit && (
+                  <Button
+                    size="sm"
+                    variant="warning"
+                    className="me-2"
+                    onClick={() => openEditModal(task)}
+                  >
+                    <FaEdit />
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="danger"
+                  onClick={() => openDeleteConfirm(task._id)}
+                >
+                  <FaTrash />
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </React.Fragment>
+      ))}
+      {renderPagination(groupedData.length, currentPage, setPage)}
+    </>
+  );
 
   const renderPagination = (total, currentPage, onPageChange) => {
     const pages = Math.ceil(total / itemsPerPage);
@@ -221,6 +246,36 @@ function AdminTasks() {
     );
   };
 
+  const downloadPDF = (groupedList, title, filename) => {
+    const doc = new jsPDF();
+    doc.setFontSize(16);
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const textWidth = doc.getTextWidth(title);
+    const center = (pageWidth - textWidth) / 2;
+    doc.text(title, center, 15);
+
+    groupedList.forEach((group) => {
+      autoTable(doc, {
+        startY: doc.lastAutoTable?.finalY || 20,
+        head: [[`Assigned To: ${group.user}`]],
+        body: [],
+      });
+
+      autoTable(doc, {
+        startY: doc.lastAutoTable?.finalY || 30,
+        head: [['Title', 'Description', 'Deadline', 'Status']],
+        body: group.tasks.map((task) => [
+          task.title,
+          task.description,
+          task.deadline ? new Date(task.deadline).toLocaleDateString() : '',
+          task.status,
+        ]),
+      });
+    });
+
+    doc.save(filename);
+  };
+
   return (
     <>
       <AdminNavbar />
@@ -237,18 +292,14 @@ function AdminTasks() {
             <Button
               variant="secondary"
               className="me-2"
-              onClick={() =>
-                downloadPDF(upcomingTasks, 'Upcoming/Ongoing Tasks Report', 'upcoming_tasks.pdf')
-              }
+              onClick={() => downloadPDF(upcomingTasks, 'Upcoming/Ongoing Tasks Report', 'upcoming_tasks.pdf')}
             >
               <FaFilePdf className="me-1" /> Download Upcoming Tasks
             </Button>
             <Button
               variant="secondary"
               className="me-2"
-              onClick={() =>
-                downloadPDF(pastTasks, 'Past Deadline Tasks Report', 'past_tasks.pdf')
-              }
+              onClick={() => downloadPDF(pastTasks, 'Past Deadline Tasks Report', 'past_tasks.pdf')}
             >
               <FaFilePdf className="me-1" /> Download Past Tasks
             </Button>
@@ -258,10 +309,10 @@ function AdminTasks() {
           </div>
         </div>
 
-        {loading && <Spinner animation="border" className="mb-2" />}
+        {loading && <Spinner animation="border" className="mb-3" />}
 
         {/* Upcoming Tasks Table */}
-        <h5>Upcoming/Ongoing Tasks</h5>
+        <h5 className="mb-3">Upcoming/Ongoing Tasks</h5>
         <Table striped bordered hover responsive>
           <thead>
             <tr>
@@ -273,39 +324,11 @@ function AdminTasks() {
               <th className="text-center" style={{ minWidth: '150px' }}>Actions</th>
             </tr>
           </thead>
-          <tbody>
-            {paginate(upcomingTasks, upcomingPage).map((task) => (
-              <tr key={task._id}>
-                <td>{task.title}</td>
-                <td>{task.description}</td>
-                <td>{task.deadline ? new Date(task.deadline).toLocaleDateString() : ''}</td>
-                <td>{task.assignedTo?.name || 'Unassigned'}</td>
-                <td>{task.status}</td>
-                <td className="text-center">
-                  <Button
-                    size="sm"
-                    variant="warning"
-                    className="me-2"
-                    onClick={() => openEditModal(task)}
-                  >
-                    <FaEdit />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="danger"
-                    onClick={() => openDeleteConfirm(task._id)}
-                  >
-                    <FaTrash />
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
+          <tbody>{renderGroupedTable(upcomingTasks, upcomingPage, setUpcomingPage, true)}</tbody>
         </Table>
-        {renderPagination(upcomingTasks.length, upcomingPage, setUpcomingPage)}
 
         {/* Past Tasks Table */}
-        <h5 className="mt-5">Past Deadline Tasks</h5>
+        <h5 className="mb-3">Past Deadline Tasks</h5>
         <Table striped bordered hover responsive>
           <thead>
             <tr>
@@ -317,28 +340,8 @@ function AdminTasks() {
               <th className="text-center" style={{ minWidth: '100px' }}>Actions</th>
             </tr>
           </thead>
-          <tbody>
-            {paginate(pastTasks, pastPage).map((task) => (
-              <tr key={task._id}>
-                <td>{task.title}</td>
-                <td>{task.description}</td>
-                <td>{task.deadline ? new Date(task.deadline).toLocaleDateString() : ''}</td>
-                <td>{task.assignedTo?.name || 'Unassigned'}</td>
-                <td>{task.status}</td>
-                <td className="text-center">
-                  <Button
-                    size="sm"
-                    variant="danger"
-                    onClick={() => openDeleteConfirm(task._id)}
-                  >
-                    <FaTrash />
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
+          <tbody>{renderGroupedTable(pastTasks, pastPage, setPastPage, false)}</tbody>
         </Table>
-        {renderPagination(pastTasks.length, pastPage, setPastPage)}
 
         {/* Modals */}
         <Modal show={showAddEditModal} onHide={() => setShowAddEditModal(false)}>

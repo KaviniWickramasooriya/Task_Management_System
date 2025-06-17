@@ -45,15 +45,15 @@ A full-stack **Task Management System** built as part of the Gamage Recruiters S
 
 ## 🔧 Backend Setup
 
-cd backend
-npm install
-cp ../env_files/.env.backend .env
-npm start
+- cd backend
+- npm install
+- cp ../env_files/.env.backend .env
+- npm start
 
 
 ## 🖥️  Frontend Setup
 
-cd ../frontend
-npm install
-cp ../env_files/.env.frontend .env
-npm run dev
+- cd ../frontend
+- npm install
+- cp ../env_files/.env.frontend .env
+- npm run dev

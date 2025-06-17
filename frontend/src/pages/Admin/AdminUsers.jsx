@@ -6,6 +6,10 @@ import {
 import { FaEdit, FaTrash } from 'react-icons/fa';
 import { FaUserSlash } from 'react-icons/fa6';
 import AdminNavbar from '../../components/Admin/AdminNavbar';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { FaDownload } from 'react-icons/fa';
+
 
 function AdminUsers() {
   const [users, setUsers] = useState([]);
@@ -23,7 +27,7 @@ function AdminUsers() {
       const res = await fetch(`${process.env.REACT_APP_API_URL}/users`);
       const data = await res.json();
       setUsers(data);
-      setFiltered(data);
+      setFiltered(data.filter(user => user.role === 'intern'));
     } catch (err) {
       setError('Error fetching users.');
     }
@@ -34,14 +38,13 @@ function AdminUsers() {
   }, []);
 
   useEffect(() => {
-  const filtered = users.filter(user =>
-    user.role === 'intern' &&
-    (user.name.toLowerCase().includes(search.toLowerCase()) ||
-     user.email.toLowerCase().includes(search.toLowerCase()))
-  );
-  setFiltered(filtered);
-}, [search, users]);
-
+    const filteredUsers = users.filter(user =>
+      user.role === 'intern' &&
+      (user.name.toLowerCase().includes(search.toLowerCase()) ||
+        user.email.toLowerCase().includes(search.toLowerCase()))
+    );
+    setFiltered(filteredUsers);
+  }, [search, users]);
 
   const handleUpdate = user => {
     setSelectedUser(user);
@@ -97,25 +100,63 @@ function AdminUsers() {
     setLoading(false);
   };
 
+  const downloadPDF = () => {
+    const doc = new jsPDF();
+    const date = new Date().toLocaleDateString();
+
+    doc.setFontSize(18);
+    doc.text('Interns Report', 105, 14, { align: 'center' });
+
+    doc.setFontSize(11);
+    doc.text(`Date: ${date}`, 14, 20);
+
+    const tableColumn = ['#', 'Name', 'Email', 'Status'];
+    const tableRows = [];
+
+    filtered.forEach((user, index) => {
+      tableRows.push([
+        index + 1,
+        user.name,
+        user.email,
+        user.isActive ? 'Active' : 'Deactivated'
+      ]);
+    });
+
+    autoTable(doc, {
+      startY: 26,
+      head: [tableColumn],
+      body: tableRows,
+      styles: { halign: 'center' },
+      headStyles: { fillColor: [0, 123, 255] },
+    });
+
+    doc.save('interns.pdf');
+  };
+
   return (
     <>
       <AdminNavbar />
       <div className="container mt-4">
-        <div className="d-flex justify-content-between align-items-center mb-3">
-          <h4>All Users</h4>
-          <InputGroup style={{ maxWidth: '300px' }}>
-            <FormControl
-              placeholder="Search by name/email"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-          </InputGroup>
+        <div className="d-flex flex-wrap justify-content-between align-items-center mb-3">
+          <h4 className="mb-0">All Interns</h4>
+          <div className="d-flex justify-content-between align-items-center gap-2">
+            <InputGroup style={{ maxWidth: '280px' }} className="me-2 mb-2">
+              <FormControl
+                placeholder="Search by name/email"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </InputGroup>
+            <Button variant="success" onClick={downloadPDF} className="mb-2 d-flex align-items-center gap-2">
+              <FaDownload /> Download
+            </Button>
+          </div>
         </div>
 
         {error && <Alert variant="danger">{error}</Alert>}
 
         <Table striped bordered hover responsive>
-          <thead className="table-primary">
+          <thead className="table-primary text-center">
             <tr>
               <th>#</th>
               <th>Name</th>
@@ -124,7 +165,7 @@ function AdminUsers() {
               <th>Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="text-center">
             {filtered.map((user, idx) => (
               <tr key={user._id}>
                 <td>{idx + 1}</td>
@@ -132,31 +173,31 @@ function AdminUsers() {
                 <td>{user.email}</td>
                 <td>{user.isActive ? 'Active' : 'Deactivated'}</td>
                 <td>
-                  <Button
-                    size="sm"
-                    variant="warning"
-                    className="me-2"
-                    onClick={() => handleUpdate(user)}
-                  >
-                    <FaEdit />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="danger"
-                    className="me-2"
-                    onClick={() => handleDelete(user._id)}
-                  >
-                    <FaTrash />
-                  </Button>
-                  {user.isActive && (
+                  <div className="d-flex justify-content-center gap-2 flex-wrap">
                     <Button
                       size="sm"
-                      variant="secondary"
-                      onClick={() => handleDeactivate(user._id)}
+                      variant="warning"
+                      onClick={() => handleUpdate(user)}
                     >
-                      <FaUserSlash />
+                      <FaEdit />
                     </Button>
-                  )}
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() => handleDelete(user._id)}
+                    >
+                      <FaTrash />
+                    </Button>
+                    {user.isActive && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleDeactivate(user._id)}
+                      >
+                        <FaUserSlash />
+                      </Button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

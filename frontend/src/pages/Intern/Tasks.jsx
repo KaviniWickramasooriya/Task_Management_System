@@ -2,14 +2,19 @@ import React, { useEffect, useState, useCallback } from 'react';
 import UserNavbar from '../../components/Intern/UserNavbar';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Button } from 'react-bootstrap';
+import { Button, Pagination } from 'react-bootstrap';
 import { FaDownload } from 'react-icons/fa';
+
+const TASKS_PER_PAGE = 5;
 
 function Tasks() {
   const [userId, setUserId] = useState(null);
-  const [tasks, setTasks] = useState([]);
+  const [tasks, setTasks] = useState({ upcoming: [], past: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const [upcomingPage, setUpcomingPage] = useState(1);
+  const [pastPage, setPastPage] = useState(1);
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -37,14 +42,29 @@ function Tasks() {
       if (!res.ok) throw new Error('Failed to fetch tasks');
       const data = await res.json();
 
-      // Sort by nearest deadline first
-      const sorted = [...data].sort((a, b) => {
-        const dateA = a.deadline ? new Date(a.deadline) : new Date(8640000000000000); // Max date
-        const dateB = b.deadline ? new Date(b.deadline) : new Date(8640000000000000);
-        return dateA - dateB;
+      const now = new Date();
+      const upcoming = [];
+      const past = [];
+
+      data.forEach(task => {
+        const deadline = task.deadline ? new Date(task.deadline) : null;
+        if (!deadline || deadline >= now) {
+          upcoming.push(task);
+        } else {
+          past.push(task);
+        }
       });
 
-      setTasks(sorted);
+      const sortByDeadline = (a, b) => {
+        const dateA = a.deadline ? new Date(a.deadline) : new Date(8640000000000000);
+        const dateB = b.deadline ? new Date(b.deadline) : new Date(8640000000000000);
+        return dateA - dateB;
+      };
+
+      setTasks({
+        upcoming: upcoming.sort(sortByDeadline),
+        past: past.sort(sortByDeadline),
+      });
       setError('');
     } catch (err) {
       console.error(err);
@@ -70,15 +90,7 @@ function Tasks() {
       });
 
       if (!res.ok) throw new Error('Failed to update status');
-      const updatedTask = await res.json();
-
-      setTasks(prevTasks =>
-        [...prevTasks.map(task => (task._id === taskId ? updatedTask : task))].sort((a, b) => {
-          const dateA = a.deadline ? new Date(a.deadline) : new Date(8640000000000000);
-          const dateB = b.deadline ? new Date(b.deadline) : new Date(8640000000000000);
-          return dateA - dateB;
-        })
-      );
+      fetchTasks(); // refresh tasks
     } catch (err) {
       alert('Error updating status: ' + err.message);
     }
@@ -97,45 +109,117 @@ function Tasks() {
     }
   };
 
-  const downloadPDF = () => {
+  const generatePDF = (title, tasksList, fileName) => {
     const doc = new jsPDF();
     doc.setFontSize(18);
-    const title = 'My Tasks';
     const pageWidth = doc.internal.pageSize.getWidth();
-    const titleX = pageWidth / 2;
-    doc.text(title, titleX, 22, { align: 'center' });
+    doc.text(title, pageWidth / 2, 22, { align: 'center' });
 
-    const today = new Date();
-    const formattedDate = today.toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
+    const today = new Date().toLocaleDateString('en-GB', {
+      day: 'numeric', month: 'long', year: 'numeric',
     });
+
     doc.setFontSize(11);
-    doc.text(`Date: ${formattedDate}`, titleX, 30, { align: 'center' });
+    doc.text(`Date: ${today}`, pageWidth / 2, 30, { align: 'center' });
 
     const tableColumn = ["Title", "Description", "Status", "Deadline"];
-    const tableRows = [];
-
-    tasks.forEach(task => {
-      const rowData = [
-        task.title,
-        task.description,
-        task.status.replace('-', ' ').toUpperCase(),
-        task.deadline ? new Date(task.deadline).toLocaleDateString('en-GB') : 'N/A'
-      ];
-      tableRows.push(rowData);
-    });
+    const tableRows = tasksList.map(task => [
+      task.title,
+      task.description,
+      task.status.replace('-', ' ').toUpperCase(),
+      task.deadline ? new Date(task.deadline).toLocaleDateString('en-GB') : 'N/A',
+    ]);
 
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
       startY: 40,
       styles: { cellPadding: 3, fontSize: 10 },
-      headStyles: { fillColor: [99, 121, 171] }, // Light blue header
+      headStyles: { fillColor: [99, 121, 171] },
     });
 
-    doc.save('My_Tasks.pdf');
+    doc.save(fileName);
+  };
+
+  const renderPagination = (totalTasks, currentPage, setPage) => {
+    const totalPages = Math.ceil(totalTasks / TASKS_PER_PAGE);
+    if (totalPages <= 1) return null;
+
+    return (
+      <Pagination className="mt-3 justify-content-center">
+        {[...Array(totalPages)].map((_, index) => (
+          <Pagination.Item
+            key={index}
+            active={index + 1 === currentPage}
+            onClick={() => setPage(index + 1)}
+          >
+            {index + 1}
+          </Pagination.Item>
+        ))}
+      </Pagination>
+    );
+  };
+
+  const renderTable = (title, tasksList, pdfName, currentPage, setPage, isUpcoming) => {
+    const startIdx = (currentPage - 1) * TASKS_PER_PAGE;
+    const currentTasks = tasksList.slice(startIdx, startIdx + TASKS_PER_PAGE);
+
+    return (
+      <div className="mb-5">
+        <div className="d-flex justify-content-between align-items-center mb-3">
+          <h4 className="mb-0">{title}</h4>
+          {tasksList.length > 0 && (
+            <Button variant="success" onClick={() => generatePDF(title, tasksList, pdfName)}>
+              <FaDownload /> Download PDF
+            </Button>
+          )}
+        </div>
+        <div className="table-responsive">
+          <table className="table table-hover table-striped align-middle" style={{ border: '1px solid #dee2e6' }}>
+            <thead className="table-light">
+              <tr>
+                <th style={{ border: '1px solid #dee2e6' }}>Title</th>
+                <th style={{ border: '1px solid #dee2e6' }}>Description</th>
+                <th style={{ border: '1px solid #dee2e6' }}>Deadline</th>
+                <th style={{ border: '1px solid #dee2e6' }}>Status</th>
+                {isUpcoming && <th style={{ border: '1px solid #dee2e6' }}>Change Status</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {currentTasks.map(task => (
+                <tr key={task._id}>
+                  <td className="fw-semibold">{task.title}</td>
+                  <td>{task.description}</td>
+                  <td>{task.deadline ? new Date(task.deadline).toLocaleDateString('en-GB') : 'N/A'}</td>
+                  <td>
+                    <span className={getStatusBadge(task.status)}>
+                      {task.status.replace('-', ' ').toUpperCase()}
+                    </span>
+                  </td>
+                  {isUpcoming && (
+                    <td style={{ minWidth: '140px' }}>
+                      <select
+                        value={task.status}
+                        onChange={e => updateStatus(task._id, e.target.value)}
+                        className="form-select form-select-sm"
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="in-progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                      </select>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {currentTasks.length === 0 && (
+            <p className="text-center text-muted fst-italic">No tasks found</p>
+          )}
+          {renderPagination(tasksList.length, currentPage, setPage)}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -143,84 +227,16 @@ function Tasks() {
       <UserNavbar />
       <div className="container my-5" style={{ maxWidth: '1100px' }}>
         <div className="card shadow-sm p-4">
-          <div className="d-flex justify-content-between align-items-center mb-4">
-            <h2 className="mb-0 text-center w-100">My Tasks</h2>
-            {tasks.length > 0 && (
-              <Button
-                variant="success"
-                className="me-2"
-                style={{ width: '180px' }}
-                onClick={downloadPDF}
-              >
-                <FaDownload /> Download
-              </Button>
-            )}
-          </div>
+          <h2 className="text-center mb-4">My Tasks</h2>
 
-          {loading && (
-            <p className="text-center fs-5 text-primary">Loading tasks...</p>
-          )}
+          {loading && <p className="text-center fs-5 text-primary">Loading tasks...</p>}
+          {error && <p className="text-center fs-5 text-danger fw-semibold">{error}</p>}
 
-          {error && (
-            <p className="text-center fs-5 text-danger fw-semibold">{error}</p>
-          )}
-
-          {!loading && !error && tasks.length === 0 && (
-            <p className="text-center fs-5 text-muted fst-italic">
-              No tasks found
-            </p>
-          )}
-
-          {!loading && !error && tasks.length > 0 && (
-            <div className="table-responsive">
-<table
-                className="table table-hover table-striped align-middle"
-                style={{ border: '1px solid #dee2e6', borderCollapse: 'collapse' }}
-              >
-                <thead
-                  className="table-light"
-                  style={{ borderBottom: '2px solid #dee2e6' }}
-                >
-                  <tr>
-                    <th style={{ border: '1px solid #dee2e6' }}>Title</th>
-                    <th style={{ border: '1px solid #dee2e6' }}>Description</th>
-                    <th style={{ border: '1px solid #dee2e6' }}>Deadline</th>
-                    <th style={{ border: '1px solid #dee2e6' }}>Status</th>
-                    <th style={{ border: '1px solid #dee2e6' }}>Change Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tasks.map(task => (
-                    <tr key={task._id}>
-                      <td className="fw-semibold">{task.title}</td>
-                      <td>{task.description}</td>
-                      <td>
-                        {task.deadline
-                          ? new Date(task.deadline).toLocaleDateString('en-GB')
-                          : 'N/A'}
-                      </td>
-                      <td>
-                        <span className={getStatusBadge(task.status)}>
-                          {task.status.replace('-', ' ').toUpperCase()}
-                        </span>
-                      </td>
-                      <td style={{ minWidth: '140px' }}>
-                        <select
-                          value={task.status}
-                          onChange={e => updateStatus(task._id, e.target.value)}
-                          className="form-select form-select-sm"
-                          aria-label={`Change status for ${task.title}`}
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="in-progress">In Progress</option>
-                          <option value="completed">Completed</option>
-                        </select>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          {!loading && !error && (
+            <>
+              {renderTable("🕒 Upcoming Tasks", tasks.upcoming, "Upcoming_Tasks.pdf", upcomingPage, setUpcomingPage, true)}
+              {renderTable("❌ Past Deadline Tasks", tasks.past, "Past_Tasks.pdf", pastPage, setPastPage, false)}
+            </>
           )}
         </div>
       </div>

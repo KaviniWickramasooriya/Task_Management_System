@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Spinner, Toast } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 
@@ -9,8 +9,20 @@ function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState({ show: false, message: '', success: false });
 
+  const initializeGoogleSignIn = useCallback(() => {
+    if (window.google && window.google.accounts && window.google.accounts.id) {
+      window.google.accounts.id.initialize({
+        client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID,
+        callback: handleGoogleResponse,
+      });
+      window.google.accounts.id.renderButton(
+        document.getElementById('googleSignInDiv'),
+        { theme: 'outline', size: 'large', width: '100%' }
+      );
+    }
+  }, []);
+
   useEffect(() => {
-    // Load Google Identity Services SDK script
     const scriptId = 'google-oauth-script';
     if (!document.getElementById(scriptId)) {
       const script = document.createElement('script');
@@ -23,28 +35,13 @@ function LoginPage() {
     } else {
       initializeGoogleSignIn();
     }
-  }, []);
-
-  const initializeGoogleSignIn = () => {
-    if (window.google && window.google.accounts && window.google.accounts.id) {
-      window.google.accounts.id.initialize({
-        client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID,
-        callback: handleGoogleResponse,
-      });
-      window.google.accounts.id.renderButton(
-        document.getElementById('googleSignInDiv'),
-        { theme: 'outline', size: 'large', width: '100%' } // customization
-      );
-    }
-  };
+  }, [initializeGoogleSignIn]);
 
   const handleGoogleResponse = async response => {
     setLoading(true);
     try {
-      // The ID token from Google
       const credential = response.credential;
 
-      // Send the token to backend to verify and login/signup user
       const res = await fetch(`${process.env.REACT_APP_API_URL}/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -167,7 +164,6 @@ function LoginPage() {
         </div>
       </div>
 
-      {/* Toast Notification */}
       {toast.show && (
         <div className="position-fixed bottom-0 end-0 p-3" style={{ zIndex: 11 }}>
           <Toast
